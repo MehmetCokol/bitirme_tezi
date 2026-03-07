@@ -1,9 +1,14 @@
 import 'dart:io';
+
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
-import 'package:permission_handler/permission_handler.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+
+import '../services/api_service.dart';
+import '../services/translation_service.dart';
+import '../services/tts_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -12,9 +17,23 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-enum AutoStatus { idle, starting, capturing, waiting, stopped, error }
+enum AutoStatus {
+  idle,
+  starting,
+  capturing,
+  uploading,
+  translating,
+  speaking,
+  waiting,
+  stopped,
+  error,
+}
 
 class _HomeScreenState extends State<HomeScreen> {
+  final ApiService _apiService = const ApiService();
+  final TranslationService _translationService = TranslationService();
+  final TtsService _ttsService = TtsService();
+
   CameraController? _controller;
   bool _cameraReady = false;
 
@@ -25,6 +44,11 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _lastCapturePath;
   DateTime? _lastCaptureTime;
 
+  String? _captionEn;
+  String? _captionTr;
+  String? _lastRequestId;
+  String? _modelName;
+
   AutoStatus _status = AutoStatus.idle;
   String? _error;
 
@@ -34,6 +58,15 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _initCamera();
+    _initTts();
+  }
+
+  Future<void> _initTts() async {
+    try {
+      await _ttsService.init();
+    } catch (e) {
+      debugPrint('TTS init failed: $e');
+    }
   }
 
   Future<void> _initCamera() async {
@@ -67,6 +100,7 @@ class _HomeScreenState extends State<HomeScreen> {
       await controller.initialize();
 
       if (!mounted) return;
+
       setState(() {
         _controller = controller;
         _cameraReady = true;
@@ -92,6 +126,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _stopAuto() async {
+    await _ttsService.stop();
+
+    if (!mounted) return;
+
     setState(() {
       _autoEnabled = false;
       _status = AutoStatus.stopped;
@@ -125,32 +163,84 @@ class _HomeScreenState extends State<HomeScreen> {
 
       final file = await _controller!.takePicture();
 
-      // External storage'a kopyala (görünür olsun)
       final extDir = await getExternalStorageDirectory();
-      if (extDir != null) {
-        final picturesDir = Directory(p.join(extDir.path, "Pictures"));
-        if (!await picturesDir.exists()) {
-          await picturesDir.create(recursive: true);
-        }
+      if (extDir == null) {
+        throw Exception("External storage directory not found.");
+      }
 
-        final filename =
-            "cap_${DateTime.now().millisecondsSinceEpoch}.jpg";
-        final savedPath = p.join(picturesDir.path, filename);
+      final picturesDir = Directory(p.join(extDir.path, "Pictures"));
+      if (!await picturesDir.exists()) {
+        await picturesDir.create(recursive: true);
+      }
 
-        await File(file.path).copy(savedPath);
+      final filename = "cap_${DateTime.now().millisecondsSinceEpoch}.jpg";
+      final savedPath = p.join(picturesDir.path, filename);
+
+      await File(file.path).copy(savedPath);
+
+      if (!mounted) return;
+
+      setState(() {
+        _captureCount++;
+        _lastCapturePath = savedPath;
+        _lastCaptureTime = DateTime.now();
+        _captionEn = null;
+        _captionTr = null;
+        _lastRequestId = null;
+        _modelName = null;
+      });
+
+      debugPrint("Saved: $savedPath");
+
+      setState(() {
+        _status = AutoStatus.uploading;
+      });
+
+      final responseData = await _apiService.uploadImageForCaption(savedPath);
+      final captionEn = responseData['caption_en']?.toString() ?? '';
+
+      String captionTr = '';
+      if (captionEn.trim().isNotEmpty) {
+        if (!mounted) return;
 
         setState(() {
-          _captureCount++;
-          _lastCapturePath = savedPath;
-          _lastCaptureTime = DateTime.now();
+          _status = AutoStatus.translating;
         });
 
-        debugPrint("Saved: $savedPath");
+        captionTr = await _translationService.translateEnToTr(captionEn);
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _captionEn = captionEn;
+        _captionTr = captionTr;
+        _lastRequestId = responseData['request_id']?.toString();
+        _modelName = responseData['model_name']?.toString();
+        _status = AutoStatus.idle;
+      });
+
+      if (captionTr.trim().isNotEmpty) {
+        if (!mounted) return;
+
+        setState(() {
+          _status = AutoStatus.speaking;
+        });
+
+        await _ttsService.speak(captionTr);
+
+        if (!mounted) return;
+
+        setState(() {
+          _status = AutoStatus.idle;
+        });
       }
     } catch (e) {
+      if (!mounted) return;
+
       setState(() {
         _status = AutoStatus.error;
-        _error = "Capture failed: $e";
+        _error = "Cycle failed: $e";
         _autoEnabled = false;
       });
     } finally {
@@ -161,6 +251,8 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _controller?.dispose();
+    _translationService.dispose();
+    _ttsService.stop();
     super.dispose();
   }
 
@@ -172,6 +264,12 @@ class _HomeScreenState extends State<HomeScreen> {
         return "Starting camera...";
       case AutoStatus.capturing:
         return "Capturing...";
+      case AutoStatus.uploading:
+        return "Uploading to backend...";
+      case AutoStatus.translating:
+        return "Translating...";
+      case AutoStatus.speaking:
+        return "Speaking...";
       case AutoStatus.waiting:
         return "Waiting 15s...";
       case AutoStatus.stopped:
@@ -186,7 +284,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final controller = _controller;
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Auto Caption (V1)")),
+      appBar: AppBar(title: const Text("Auto Caption (Vers juninho)")),
       body: Column(
         children: [
           Expanded(
@@ -197,22 +295,47 @@ class _HomeScreenState extends State<HomeScreen> {
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text("Status: ${_statusText(_status)}"),
                 Text("Captured: $_captureCount"),
                 if (_lastCaptureTime != null)
-                  Text("Last: ${_lastCaptureTime!.toIso8601String()}"),
+                  Text("Last capture: ${_lastCaptureTime!.toIso8601String()}"),
                 if (_lastCapturePath != null)
                   Text(
-                    _lastCapturePath!,
+                    "Path: $_lastCapturePath",
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                 const SizedBox(height: 12),
+                if (_captionEn != null)
+                  Text(
+                    "Caption EN: $_captionEn",
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                if (_captionTr != null)
+                  Text(
+                    "Caption TR: $_captionTr",
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                if (_modelName != null) Text("Model: $_modelName"),
+                if (_lastRequestId != null)
+                  Text(
+                    "Request ID: $_lastRequestId",
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                if (_error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      "Error: $_error",
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                  ),
+                const SizedBox(height: 12),
                 ElevatedButton(
-                  onPressed: (!_autoEnabled && _cameraReady)
-                      ? _startAuto
-                      : null,
+                  onPressed: (!_autoEnabled && _cameraReady) ? _startAuto : null,
                   child: const Text("Başlat"),
                 ),
                 const SizedBox(height: 8),
