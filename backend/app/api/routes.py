@@ -1,58 +1,57 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException
 import time
 import uuid
 
+from fastapi import APIRouter, File, HTTPException, UploadFile
+
 from app.utils.logger import get_logger
+from app.services.caption_service import generate_caption
+from app.core import model_registry
 
 router = APIRouter()
-logger = get_logger()
+logger = get_logger("caption_service")
 
 
 @router.get("/health")
 def health():
-    return {"status": "ok"}
+    return {"durum": "ok program calisiyor kardes"}
 
 
 @router.post("/caption")
 async def caption(file: UploadFile = File(...)):
-
     request_id = str(uuid.uuid4())
-    start_total = time.time()
 
-    # Content-type kontrolü
-    if not file.content_type.startswith("image/"):
-        logger.warning(f"request_id={request_id} status=invalid_file")
+    logger.info(f"[{request_id}] /caption request received")
+
+    if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Invalid image file")
 
-    # Simulated preprocess
-    start_pre = time.time()
-    await file.read()
-    preprocess_time = int((time.time() - start_pre) * 1000)
+    try:
+        start_total = time.time()
 
-    # Simulated generation
-    start_gen = time.time()
-    time.sleep(0.05)
-    generate_time = int((time.time() - start_gen) * 1000)
+        image_bytes = await file.read()
+        read_time = int((time.time() - start_total) * 1000)
 
-    total_time = int((time.time() - start_total) * 1000)
+        result = generate_caption(image_bytes)
 
-    # Log satırı
-    logger.info(
-        f"request_id={request_id} "
-        f"preprocess_ms={preprocess_time} "
-        f"generate_ms={generate_time} "
-        f"total_ms={total_time} "
-        f"status=success"
-    )
+        total_time = int((time.time() - start_total) * 1000)
 
-    return {
-        "caption_en": "A dummy caption for testing.",
-        "model_name": "baseline-dummy",
-        "device": "cpu",
-        "timings_ms": {
-            "preprocess": preprocess_time,
-            "generate": generate_time,
-            "total": total_time
-        },
-        "request_id": request_id
-    }
+        response = {
+            "caption_en": result["caption_en"],
+            "model_name": model_registry.MODEL_NAME,
+            "device": model_registry.device,
+            "timings_ms": {
+                "read": read_time,
+                **result["timings_ms"],
+                "total": total_time,
+            },
+            "request_id": request_id,
+        }
+
+        logger.info(f"[{request_id}] caption generated: {response['caption_en']}")
+        return response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"[{request_id}] caption failed: {e}")
+        raise HTTPException(status_code=500, detail="Caption generation failed")

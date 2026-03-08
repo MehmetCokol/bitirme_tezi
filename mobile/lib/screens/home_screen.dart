@@ -284,7 +284,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final controller = _controller;
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Auto Caption (Vers juninho)")),
+      appBar: AppBar(title: const Text("Auto Caption (Versiyon 11)")),
       body: Column(
         children: [
           Expanded(

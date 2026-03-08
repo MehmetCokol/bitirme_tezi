@@ -1,7 +1,7 @@
 import logging
 
-def get_logger():
-    logger = logging.getLogger("caption_service")
+def get_logger(name: str = "caption_service"):
+    logger = logging.getLogger(name)
     logger.setLevel(logging.INFO)
 
     if not logger.handlers:
