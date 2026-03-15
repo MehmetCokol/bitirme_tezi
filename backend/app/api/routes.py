@@ -13,16 +13,31 @@ logger = get_logger("caption_service")
 
 @router.get("/health")
 def health():
-    return {"durum": "ok program calisiyor kardes"}
+    logger.info(
+        f"/health check | model_name={model_registry.MODEL_NAME} | device={model_registry.device} | loaded={model_registry.is_loaded}"
+    )
+
+    return {
+        "status": "ok program çalisiyor",
+        "service": "Caption Servisi",
+        "model_name": model_registry.MODEL_NAME,
+        "device": model_registry.device,
+        "loaded": model_registry.is_loaded,
+    }
 
 
 @router.post("/caption")
 async def caption(file: UploadFile = File(...)):
     request_id = str(uuid.uuid4())
 
-    logger.info(f"[{request_id}] /caption request received")
+    logger.info(
+        f"[{request_id}] /caption request received | filename={file.filename} | content_type={file.content_type}"
+    )
 
     if not file.content_type or not file.content_type.startswith("image/"):
+        logger.warning(
+            f"[{request_id}] invalid file type | filename={file.filename} | content_type={file.content_type}"
+        )
         raise HTTPException(status_code=400, detail="Invalid image file")
 
     try:
@@ -30,6 +45,11 @@ async def caption(file: UploadFile = File(...)):
 
         image_bytes = await file.read()
         read_time = int((time.time() - start_total) * 1000)
+        file_size = len(image_bytes)
+
+        logger.info(
+            f"[{request_id}] file read completed | size_bytes={file_size} | read_ms={read_time}"
+        )
 
         result = generate_caption(image_bytes)
 
@@ -47,7 +67,10 @@ async def caption(file: UploadFile = File(...)):
             "request_id": request_id,
         }
 
-        logger.info(f"[{request_id}] caption generated: {response['caption_en']}")
+        logger.info(
+            f"[{request_id}] caption generated | model_name={model_registry.MODEL_NAME} | device={model_registry.device} | total_ms={total_time} | caption={response['caption_en']}"
+        )
+
         return response
 
     except HTTPException:

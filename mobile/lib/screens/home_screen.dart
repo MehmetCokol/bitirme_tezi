@@ -200,6 +200,8 @@ class _HomeScreenState extends State<HomeScreen> {
       final captionEn = responseData['caption_en']?.toString() ?? '';
 
       String captionTr = '';
+      String? translationError;
+
       if (captionEn.trim().isNotEmpty) {
         if (!mounted) return;
 
@@ -207,7 +209,13 @@ class _HomeScreenState extends State<HomeScreen> {
           _status = AutoStatus.translating;
         });
 
-        captionTr = await _translationService.translateEnToTr(captionEn);
+        try {
+          captionTr = await _translationService.translateEnToTr(captionEn);
+        } catch (e) {
+          translationError = "Translation failed: $e";
+          debugPrint(translationError);
+          captionTr = '';
+        }
       }
 
       if (!mounted) return;
@@ -217,6 +225,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _captionTr = captionTr;
         _lastRequestId = responseData['request_id']?.toString();
         _modelName = responseData['model_name']?.toString();
+        _error = translationError;
         _status = AutoStatus.idle;
       });
 

@@ -10,6 +10,7 @@ class TtsService {
     await _flutterTts.setSpeechRate(0.45);
     await _flutterTts.setPitch(1.0);
     await _flutterTts.setVolume(1.0);
+    await _flutterTts.awaitSpeakCompletion(true);
   }
 
   Future<void> speak(String text) async {
