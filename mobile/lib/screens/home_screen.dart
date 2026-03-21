@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter/services.dart';
 
 import '../services/api_service.dart';
 import '../services/translation_service.dart';
@@ -293,66 +294,208 @@ class _HomeScreenState extends State<HomeScreen> {
     final controller = _controller;
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Auto Caption (Versiyon 11)")),
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: const Text("Auto Caption", style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        foregroundColor: Colors.black87,
+        centerTitle: true,
+      ),
       body: Column(
         children: [
-          Expanded(
-            child: (_cameraReady && controller != null)
-                ? CameraPreview(controller)
-                : Center(child: Text(_error ?? _statusText(_status))),
-          ),
           Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text("Status: ${_statusText(_status)}"),
-                Text("Captured: $_captureCount"),
-                if (_lastCaptureTime != null)
-                  Text("Last capture: ${_lastCaptureTime!.toIso8601String()}"),
-                if (_lastCapturePath != null)
-                  Text(
-                    "Path: $_lastCapturePath",
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.15),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
                   ),
-                const SizedBox(height: 12),
-                if (_captionEn != null)
-                  Text(
-                    "Caption EN: $_captionEn",
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                if (_captionTr != null)
-                  Text(
-                    "Caption TR: $_captionTr",
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                if (_modelName != null) Text("Model: $_modelName"),
-                if (_lastRequestId != null)
-                  Text(
-                    "Request ID: $_lastRequestId",
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                if (_error != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Text(
-                      "Error: $_error",
-                      style: const TextStyle(color: Colors.red),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(24),
+                child: (_cameraReady && controller != null)
+                    ? AspectRatio(
+                  aspectRatio: 3 / 4,
+                  child: CameraPreview(controller),
+                )
+                    : AspectRatio(
+                  aspectRatio: 3 / 4,
+                  child: Container(
+                    color: Colors.grey.shade100,
+                    child: Center(
+                      child: Text(
+                        _error ?? _statusText(_status),
+                        style: const TextStyle(color: Colors.black54),
+                      ),
                     ),
                   ),
-                const SizedBox(height: 12),
-                ElevatedButton(
-                  onPressed: (!_autoEnabled && _cameraReady) ? _startAuto : null,
-                  child: const Text("Başlat"),
                 ),
-                const SizedBox(height: 8),
-                OutlinedButton(
-                  onPressed: _autoEnabled ? _stopAuto : null,
-                  child: const Text("Durdur"),
-                ),
-              ],
+              ),
+            ),
+          ),
+          Expanded(
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: _captionTr != null
+                        ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text(
+                          "Caption_TR",
+                          style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _captionTr!,
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          "Caption_EN",
+                          style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _captionEn!,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey.shade800,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    )
+                        : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 100,
+                          height: 14,
+                          decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(4)),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          width: double.infinity,
+                          height: 20,
+                          decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(4)),
+                        ),
+                        const SizedBox(height: 6),
+                        Container(
+                          width: MediaQuery.of(context).size.width * 0.6,
+                          height: 20,
+                          decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(4)),
+                        ),
+                        const SizedBox(height: 20),
+                        Container(
+                          width: 120,
+                          height: 12,
+                          decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(4)),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          width: MediaQuery.of(context).size.width * 0.8,
+                          height: 14,
+                          decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(4)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: (!_autoEnabled && _cameraReady)
+                              ? () {
+                            HapticFeedback.vibrate();
+                            _startAuto();
+                          }
+                              : null,
+                          icon: const Icon(Icons.play_arrow_rounded, size: 28),
+                          label: const Text("Başlat", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            backgroundColor: Colors.green.shade600,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _autoEnabled
+                              ? () {
+                            HapticFeedback.vibrate();
+                            _stopAuto();
+                          }
+                              : null,
+                          icon: const Icon(Icons.stop_rounded, size: 28),
+                          label: const Text("Durdur", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            backgroundColor: Colors.red.shade600,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Opacity(
+                    opacity: _lastCaptureTime != null ? 1.0 : 0.0,
+                    child: Center(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Column(
+                          children: [
+                            Text(
+                              "Status: ${_statusText(_status)}  |  Captured: $_captureCount",
+                              style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+                            ),
+                            Text(
+                              "Last: ${_lastCaptureTime?.toLocal().toString().split('.')[0] ?? '-'}  |  Model: ${_modelName ?? '-'}",
+                              style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+                            ),
+                            Text(
+                              "Req ID: ${_lastRequestId ?? '-'}",
+                              style: TextStyle(fontSize: 9, color: Colors.grey.shade400),
+                            ),
+                            if (_error != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(
+                                  "Error: $_error",
+                                  style: const TextStyle(fontSize: 10, color: Colors.redAccent, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
