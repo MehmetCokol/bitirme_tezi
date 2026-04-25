@@ -47,8 +47,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String? _captionEn;
   String? _captionTr;
+  String? _translationProvider;
   String? _lastRequestId;
   String? _modelName;
+
 
   AutoStatus _status = AutoStatus.idle;
   String? _error;
@@ -187,6 +189,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _lastCaptureTime = DateTime.now();
         _captionEn = null;
         _captionTr = null;
+        _translationProvider = null;
         _lastRequestId = null;
         _modelName = null;
       });
@@ -198,12 +201,23 @@ class _HomeScreenState extends State<HomeScreen> {
       });
 
       final responseData = await _apiService.uploadImageForCaption(savedPath);
+
       final captionEn = responseData['caption_en']?.toString() ?? '';
+      final backendCaptionTr = responseData['caption_tr']?.toString() ?? '';
+      final backendProvider = responseData['translation_provider']?.toString();
 
       String captionTr = '';
+      String? translationProvider = backendProvider;
       String? translationError;
 
-      if (captionEn.trim().isNotEmpty) {
+      if (backendCaptionTr.trim().isNotEmpty) {
+        // Öncelik backend DeepL çevirisi
+        captionTr = backendCaptionTr.trim();
+        translationProvider = backendProvider ?? 'deepl';
+
+        debugPrint('Translation provider: $translationProvider');
+      } else if (captionEn.trim().isNotEmpty) {
+        // DeepL başarısızsa ML Kit fallback
         if (!mounted) return;
 
         setState(() {
@@ -212,10 +226,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
         try {
           captionTr = await _translationService.translateEnToTr(captionEn);
+          translationProvider = 'mlkit_fallback';
+
+          debugPrint('Translation provider: $translationProvider');
         } catch (e) {
           translationError = "Translation failed: $e";
           debugPrint(translationError);
           captionTr = '';
+          translationProvider = 'translation_failed';
         }
       }
 
@@ -224,6 +242,7 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _captionEn = captionEn;
         _captionTr = captionTr;
+        _translationProvider = translationProvider;
         _lastRequestId = responseData['request_id']?.toString();
         _modelName = responseData['model_name']?.toString();
         _error = translationError;
@@ -473,13 +492,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               "Status: ${_statusText(_status)}  |  Captured: $_captureCount",
                               style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
                             ),
-                            Text(
-                              "Last: ${_lastCaptureTime?.toLocal().toString().split('.')[0] ?? '-'}  |  Model: ${_modelName ?? '-'}",
-                              style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
-                            ),
-                            Text(
-                              "Req ID: ${_lastRequestId ?? '-'}",
-                              style: TextStyle(fontSize: 9, color: Colors.grey.shade400),
+                           Text(
+                              "Translation: ${_translationProvider ?? '-'}",
+                              style: TextStyle(fontSize: 15, color: Colors.grey.shade400),
                             ),
                             if (_error != null)
                               Padding(

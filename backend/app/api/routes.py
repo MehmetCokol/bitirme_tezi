@@ -5,6 +5,7 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from app.utils.logger import get_logger
 from app.services.caption_service import generate_caption
+from app.services.translation_service import translate_to_turkish
 from app.core import model_registry
 
 router = APIRouter()
@@ -53,22 +54,36 @@ async def caption(file: UploadFile = File(...)):
 
         result = generate_caption(image_bytes)
 
+        translation_result = await translate_to_turkish(
+            result["caption_en"],
+            request_id=request_id
+        )
+
         total_time = int((time.time() - start_total) * 1000)
 
         response = {
             "caption_en": result["caption_en"],
+            "caption_tr": translation_result["caption_tr"],
+            "translation_provider": translation_result["translation_provider"],
             "model_name": model_registry.MODEL_NAME,
             "device": model_registry.device,
             "timings_ms": {
                 "read": read_time,
                 **result["timings_ms"],
+                "translation": translation_result["translation_ms"],
                 "total": total_time,
             },
             "request_id": request_id,
         }
 
         logger.info(
-            f"[{request_id}] caption generated | model_name={model_registry.MODEL_NAME} | device={model_registry.device} | total_ms={total_time} | caption={response['caption_en']}"
+            f"[{request_id}] caption completed | "
+            f"model_name={model_registry.MODEL_NAME} | "
+            f"device={model_registry.device} | "
+            f"translation_provider={response['translation_provider']} | "
+            f"total_ms={total_time} | "
+            f"caption_en={response['caption_en']} | "
+            f"caption_tr={response['caption_tr']}"
         )
 
         return response
