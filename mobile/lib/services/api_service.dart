@@ -17,7 +17,7 @@ class ApiException implements Exception {
 class ApiService {
   const ApiService();
 
-  static const String _baseUrl = 'https://bowen-ghostlike-mitchel.ngrok-free.dev';
+  static const String _baseUrl = 'http://10.0.2.2:8000';
   static const String _captionEndpoint = '$_baseUrl/caption';
   static const Duration _requestTimeout = Duration(seconds: 30);
 
